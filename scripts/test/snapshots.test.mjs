@@ -219,6 +219,22 @@ test('snapshot-pg normalizes a dump independent of order, SET lines and ownershi
   }
 })
 
+test('snapshot-pg writes an empty snapshot for a database without schema objects', () => {
+  const out = tempDir()
+  try {
+    const result = node('snapshot-pg.mjs', [
+      '--input',
+      path.join(fixtures, 'pg', 'empty-dump.sql'),
+      '--out',
+      out,
+    ])
+    assert.equal(result.status, 0, result.stderr)
+    assert.equal(readFileSync(path.join(out, 'pg.sql'), 'utf8').trim(), '')
+  } finally {
+    rmSync(out, { recursive: true, force: true })
+  }
+})
+
 test('snapshot-pg requires a URL and never echoes it', () => {
   const missing = node('snapshot-pg.mjs', [], { SCHEMORY_PG_URL: '' })
   assert.notEqual(missing.status, 0)

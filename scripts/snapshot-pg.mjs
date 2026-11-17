@@ -132,8 +132,8 @@ run(() => {
     }
     dump = dumpFromDatabase(url)
   }
+  if (!dump.trim()) throw new CliError('dump is empty')
   const normalized = normalizeDump(dump)
-  if (!normalized) throw new CliError('dump contains no schema statements')
   const written = writeSnapshot(values.out, 'pg.sql', normalized)
   process.stdout.write(`wrote ${written}\n`)
 })
