@@ -1,43 +1,41 @@
 ---
 name: schemory
-description: Use before changing exported TypeScript types, Zod or JSON Schemas, or a Postgres schema, and again after the change. Takes deterministic snapshots into .schemory/, diffs them, and reports breaking changes.
+description: Use when the user wants to reuse a proven structure across projects or runs. Saves a type, interface, class, function, Zod schema or const as a named blueprint in a personal library (~/.schemory), and loads it into context later. Trigger on "/schemory snapshot", "/schemory use [name]", or a request to save or reuse a data structure, schema or code example as a pattern.
 ---
 
 # schemory
 
-Snapshot the shape of your types and schemas before a change, snapshot again after, diff, and report what broke. The scripts need only `node` (24+); they use the target project's own `typescript` and `zod`.
-
-Add `.schemory/` to the project's `.gitignore`.
-
-## Workflow
-
-1. Before editing, snapshot into `.schemory/before`.
-2. Make the change.
-3. Snapshot into `.schemory/after` with the same commands.
-4. Run the diff and read it.
-5. Report breaking changes to the user before handing back (see `references/breaking-changes.md`).
-
-Run only the snapshots that match what the change touches. Scripts live in this skill's `scripts/` folder; call them with `node <skill-dir>/scripts/<name>.mjs`.
-
-| Script | Captures | Writes |
-|---|---|---|
-| `snapshot-ts.mjs` | declaration output (`.d.ts`) of the project's `tsconfig.json` | `ts.d.ts` |
-| `snapshot-zod.mjs` | Zod schemas and JSON Schema files as JSON Schema | `zod.json` |
-| `snapshot-pg.mjs` | `pg_dump --schema-only`, normalized | `pg.sql` |
-| `diff.mjs` | compares two snapshot directories | stdout |
+A personal, cross-project library of blueprints: code a user wants an agent to follow again later. The script needs only `node` (24+) and no packages.
 
 ```sh
-node scripts/snapshot-ts.mjs --out .schemory/before
-node scripts/snapshot-zod.mjs --out .schemory/before src/schemas.ts openapi/user.json
-SCHEMORY_PG_URL=... node scripts/snapshot-pg.mjs --out .schemory/before
-node scripts/diff.mjs .schemory/before .schemory/after
+node <skill-dir>/scripts/schemory.mjs snapshot <file> <entity> --name <name> [--force] [--allow-suspect] [--project <dir>]
+node <skill-dir>/scripts/schemory.mjs list
+node <skill-dir>/scripts/schemory.mjs use [name]
 ```
 
-Common flags: `--out <dir>` (default `.schemory/current`), `--project <dir>` (default `.`), `--resolve-from <dir>` to load `typescript` or `zod` from somewhere other than the project. Each script prints `--help`.
+Blueprints live in `~/.schemory/<name>.md` (`SCHEMORY_HOME` overrides the folder). Each holds the entity verbatim, the declarations from the same file it depends on, the imports it uses, its source as `<project-folder>/<path>`, and the date.
+
+## /schemory snapshot
+
+1. Ask which file, which entity in it, and what name to save it under, unless the user already said. Names are kebab-case or camelCase.
+2. Run `snapshot`. The project root is the nearest folder with `package.json` or `.git`; pass `--project` to change it.
+3. If the name already exists, show the user and rerun with `--force` only after they confirm the overwrite.
+4. If the script refuses because lines look like credentials, show those lines. Never save real secrets: ask the user to move the value out of the code first. Use `--allow-suspect` only when the user confirms it is a false positive.
+5. Report the saved name, entity and path.
+
+Example: snapshot `AnalysisWorker` from `src/jobs/worker.ts` as `workerBlueprint`.
+
+```sh
+node <skill-dir>/scripts/schemory.mjs snapshot src/jobs/worker.ts AnalysisWorker --name workerBlueprint
+```
+
+## /schemory use [name]
+
+- No name: run `list` and show the saved blueprints (name, entity, source, date).
+- With a name: run `use <name>` so the blueprint lands in context, then follow it as the pattern for the current task. Example: in another project, `/schemory use workerBlueprint` and build the new worker in the same shape.
 
 ## Rules
 
-- Never print, log or commit a database URL. Use a development or branch database, never production. Pass the URL through an environment variable (`--url-env NAME` picks a different variable name).
-- If a script reports that `typescript` or `zod` cannot be resolved, install it in the project or use `--resolve-from`; do not vendor a copy.
-- Zod modules are imported, so they must load under plain `node` (TypeScript files need Node 24 type stripping).
-- Snapshots are deterministic: an unchanged schema diffs as `no changes`. A diff you did not expect is a finding, not noise.
+- A blueprint is a pattern to follow, not code to paste. Adapt names, imports, types and dependencies to the current project.
+- Never store secrets, tokens, connection strings or environment values in a blueprint.
+- Extraction is a lightweight scanner, not a full TypeScript parser. Read the saved blueprint once; if a dependency is missing or extra, tell the user.
